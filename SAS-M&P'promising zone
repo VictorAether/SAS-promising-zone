@@ -3,7 +3,7 @@ options nonotes nosource;
 ods listing close;run;
 ods html close;run;
 filename mp_log'E:\Mylib\mp_log';
-proc printto log= mp_log new;*指定log窗口输出设置;quit;
+proc printto log= mp_log new
 /********************************************************************
 /*Promising Zone_2010MP_simulation*/
 /*simulation_MP2010_cont*/
@@ -32,16 +32,16 @@ run;
 
 /*When dtr=cont,perform analysis.*/
 %macro
-z(dat=,stage=);*计算Z的宏，调用宏%u;
+z(dat=,stage=);
 proc means data=&dat(where=(ARM = "T" )) noprint;var x;by seed;
   output out= stat_t MEAN=mean_t STDERR=se_t;
 proc means data=&dat(where=(ARM = "C" ))noprint;var x;by seed;
   output out= stat_c MEAN=mean_c STDERR=se_c;
 data stat_&stage.;merge stat_t stat_c;by seed;run;
 data stat_&stage.;set stat_&stage.;
-  eff_&stage= mean_t - mean_c;*计算效应估计量;
-  se=sqrt(se_t**2+se_c**2);*样本量大于60时，计算合并标准误;
-  z_&stage= eff_&stage/se;*计算Zchw;
+  eff_&stage= mean_t - mean_c;
+  se=sqrt(se_t**2+se_c**2);
+  z_&stage= eff_&stage/se;
   keep seed eff_&stage z_&stage;
 proc sort data=stat_&stage.;by seed;
 run;
@@ -94,21 +94,21 @@ data GSD;
       if _Stage_ = 1 then do;
       call symput('GSD_N1_c',N1);
       call symput('GSD_N1',N);
-      call symput('Bound_UA_s1',Bound_UA);*第一阶段有效停止边界统计量;
+      call symput('Bound_UA_s1',Bound_UA);
       call symput('AltRef_U_s1',AltRef_U);
       end;
       if _Stage_ = 2 then do;
       call symput('GSD_N2_c',N1);
       call symput('GSD_N2',N);
-      call symput('Bound_UA_s2',Bound_UA);*第二阶段有效停止边界统计量;
+      call symput('Bound_UA_s2',Bound_UA);
       call symput('AltRef_U_s2',AltRef_U);
       end;
       %put _USER_;
-run;*如果是多阶段 i 的话,这里可以用循环和表转置去批量重命名变量，两阶段自行调用参数就可以;
+run;
 
 /*Step1-2:sample size parameters*/
 
-%if %lowcase(&dtr)=cont %then %do;*n0为对照组的单样本量;
+%if %lowcase(&dtr)=cont %then %do;
 %let n0=%sysfunc(ceil(%sysevalf(2*((&z_alpha+&z_beta)**2)*(&sigma0**2)/((&delta0)**2))));
 %put n0=&n0;
 %end;
@@ -135,9 +135,9 @@ run;*如果是多阶段 i 的话,这里可以用循环和表转置去批量重�
 
 /*Step2-2: Simulate MP'PZ*/
 /*Step2-2-1: set promissing zone*/
-data cp;*等0.001间隔，最小值取0.001，最大值取1，cp1的范围内所有值,此尺度越小，边界越小;
-  retain cp;do cp= 0.001 to 0.999 by 0.001;output;end;*cp为1时，不存在结果;
-run;*z1取最小值;
+data cp;
+  retain cp;do cp= 0.001 to 0.999 by 0.001;output;end;
+run;
 data result;
   set cp;
   p=probit(1-cp);
@@ -158,7 +158,7 @@ data cc;
 run;
 data ee;
    set cc nobs=lastobs;
-   if _N_ EQ lastobs then call symputx('cp_ll',cp);*将cp_ll变为宏变量对应的lower竟然是z1为0.5时？？？？？？;
+   if _N_ EQ lastobs then call symputx('cp_ll',cp);
 run;
 
 /*Step2-2-2: Data generation*/
@@ -167,30 +167,29 @@ run;
 %end;
 
 data ss_all;set ss_all;proc sort data=ss_all;by seed i;run;
-data stage1;set ss_all;if i le &n1;proc sort;by seed;run;*从样本总量中抽取第一阶段样本量;
+data stage1;set ss_all;if i le &n1;proc sort;by seed;run;
 
-data gsd_n1;set ss_all;if i le &gsd_n1;proc sort;by seed;run;*从样本总量中抽取GSD1样本量;
-data gsd_n2;set ss_all;if i le &gsd_n2;proc sort;by seed;run;*从样本总量中抽取GSD2样本量;
+data gsd_n1;set ss_all;if i le &gsd_n1;proc sort;by seed;run;
+data gsd_n2;set ss_all;if i le &gsd_n2;proc sort;by seed;run;
 
 /*Step2-2-3:Perform test for the i-th interim analysis */
 /*IA for cont */
 %if %lowcase(&dtr)=cont %then %do;*mp;
 %z(dat=stage1,stage=n1);
 
-data n1_stat1;*基于期中累积的观测计算cp_obs以及增加的样本量(IA);
+data n1_stat1;
     set stat_n1;
       z1_obs=z_n1;
       n2_inc_new_obs=ceil((&n1/(z1_obs**2)) * (((&z_alpha*sqrt(&n2)-z1_obs*sqrt(&n1))/(&n2_inc**0.5))+&z_beta)**2);
     output;run;
 %end;
 
-*由上述不同数据类型的期中分析的计算结果转换成相应值;
 %if %lowcase(&dtr)=cont %then %do;
 data n1_stat1;
   set n1_stat1;
     stat_obs=(&z_alpha-z1_obs*sqrt(&f))/(sqrt(1-&f))-(z1_obs*(sqrt(1-&f)))/sqrt(&f);
     CP_obs=1-(probnorm(stat_obs));
-    n2_new=n2_inc_new_obs+&n1;*由满足cp的新的增量加上n1，即为期中确定的样本量，经过下属限制，即可得到最终样本量;
+    n2_new=n2_inc_new_obs+&n1;
     n2_limit=min(n2_new,&n2x);*样本量限制规则1;
     n2_star=max(n2_limit,&n2);*样本量限制规则2;
   output;
@@ -249,7 +248,7 @@ data z;
   by seed;
 run;
 
-data z;*MP with ZCHW!!!这个要考虑prom和非prom的情况;
+data z;*MP with ZCHW，这个要考虑prom和非prom的情况;
   set z;
   if zone="prom" then do; zchw=z_n1*&w1+z_n1x*&w2; zchwf=z_n1*&w1+z_n1xf*&w2;end;
   else if (zone= 'fav' or zone= 'unfav') then do; zchw=z_n1*&w1+z_n1x*&w2; zchwf=z_n1*&w1+z_n1xf*&w2;end;
@@ -269,15 +268,14 @@ data end;*Judging & Verification;
   if z_gsd_n1 GE &BOUND_UA_S1 then rej_gsd1=1;else rej_gsd1=0;
   if z_gsd_n2 GE &BOUND_UA_S2 then rej_gsd2=1;else rej_gsd2=0;
   if (rej_gsd1=1 or rej_gsd2=1) then rej_gsd=1;else rej_gsd=0;
-  if rej_gsd1=1 then do;gsd_n=&gsd_n1;eff_gsd=eff_gsd_n1;end;*gsd_n是gsd的样本量，eff_gsd是治疗效应，此为第一阶段拒绝时的样本量;
-    else if rej_gsd1=0 then do;gsd_n=&gsd_n2;eff_gsd=eff_gsd_n2;end;*gsd_n是gsd的样本量，eff_gsd是治疗效应，此为第二阶段拒绝时的样本量;
+  if rej_gsd1=1 then do;gsd_n=&gsd_n1;eff_gsd=eff_gsd_n1;end;
+    else if rej_gsd1=0 then do;gsd_n=&gsd_n2;eff_gsd=eff_gsd_n2;end;
   output;
 run;
 %end;
 
 /*最终结果为end，结果输出*/
 /*分析最终结果end*/
-
 PROC MEANS DATA=end maxdec=4;/*表1，图1，不同θ下不同设计的α的值*/
   VAR rej_n1 rej_n2 rej_gsd1 rej_gsd rej_n2x rej_n2xf rej_chw rej_chwf   
 ;
